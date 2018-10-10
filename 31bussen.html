@@ -1,0 +1,144 @@
+<html>
+<head>
+<link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/font-awesome/4.7.0/css/font-awesome.min.css">
+<style>
+#main {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	flex-direction: column;
+	height: 100%;
+}
+
+.departure {
+    font-family: sans-serif;
+	text-align: center;
+	font-size: 70px;
+}
+
+.departure:first-child {
+	font-size: 300px;
+}
+
+#playButton,
+#stopButton {
+	position: absolute;
+	top: 5px;
+	left: 5px;
+	padding: 10px;
+	font-size: 70px;
+	cursor: pointer;
+}
+#playButton:hover,
+#stopButton:hover {
+	background-color: #ddd;
+}
+
+</style>
+<script>
+var intervalTime = window.location.hash ? parseInt(window.location.hash.substr(1)) : false;
+var query = 
+`{
+	quay(id: "NSR:Quay:11873") {
+    	estimatedCalls(timeRange: 1800, numberOfDepartures: 10, whiteListed: { lines: ["RUT:Line:31"] } ) {     
+      		realtime
+		    aimedArrivalTime
+		    aimedDepartureTime
+		    expectedArrivalTime
+		    expectedDepartureTime
+		    date
+	        destinationDisplay {
+      	 		frontText
+      		}
+      		serviceJourney {
+        		journeyPattern {
+          			line {
+            			id
+            			name
+          			}
+        		}
+      		}
+    	}
+  	}
+}`
+
+
+var postContent = {
+	query: query,
+	variables: null,
+	operationName: null
+}
+
+function toDoubleDigit(n){
+    return n > 9 ? "" + n: "0" + n;
+}
+
+var callAjax = function(callback) {
+    var xmlhttp = new XMLHttpRequest();
+    xmlhttp.onreadystatechange = function(){
+        if (xmlhttp.readyState == 4 && xmlhttp.status == 200){
+            callback(xmlhttp.responseText);
+        }
+    }
+    
+    xmlhttp.open("POST", "https://api.entur.org/journeyplanner/2.0/index/graphql", true);
+    xmlhttp.setRequestHeader('Access-Control-Allow-Origin', '*');
+    xmlhttp.setRequestHeader('ET-Client-Name', 'Rekk-31-bussen');
+    xmlhttp.setRequestHeader('Content-type', 'application/json');
+    xmlhttp.send(JSON.stringify(postContent));
+}
+
+var loadDataFn = function() {
+	callAjax(function(returnData) {
+		var mainEl = document.getElementById('departureDiv');
+		mainEl.innerHTML = '';
+		var jsonReturn = JSON.parse(returnData).data.quay.estimatedCalls;
+		var topData = [];
+		for (var i = 0; i < jsonReturn.length; i++) {
+			var timeDiff = (new Date(jsonReturn[i].expectedDepartureTime) - new Date()) / 1000;
+			var readableTime = Math.floor(timeDiff / 60) + '.' + toDoubleDigit(Math.floor(timeDiff % 60));
+		
+			var departureEl = document.createElement('div');
+			departureEl.className = "departure";
+			departureEl.innerHTML = readableTime;
+			mainEl.appendChild(departureEl);
+		}
+	})
+}
+
+var playFn = function() {
+	document.getElementById('playButton').style.display = "none";
+	document.getElementById('stopButton').style.display = "inline-block";
+	loadDataFn();
+	if (intervalTime) {
+		globalInterval = setInterval(loadDataFn, intervalTime);	
+	} else {
+		document.getElementById('stopButton').style.display = "none";
+	}
+}
+
+var stopFn = function() {
+	document.getElementById('stopButton').style.display = "none";
+	document.getElementById('playButton').style.display = "inline-block";
+	clearInterval(globalInterval);
+}
+
+window.onload = function() {
+	document.getElementById('playButton').addEventListener('click', function() {
+		playFn();
+	});
+	document.getElementById('stopButton').addEventListener('click', function() {
+		stopFn();
+	});
+	playFn();
+}
+</script>
+</head>
+<body>
+	<div id="playButton" class="fa fa-fw fa-play"></div>
+	<div id="stopButton" class="fa fa-fw fa-stop"></div>
+	<div id="main">
+		<div id="departureDiv"></div>
+	</div>
+</body>
+</html>
